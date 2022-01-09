@@ -5,6 +5,7 @@ import sqlite3
 # modulo para conexion
 
 class Product:
+    db_name = 'database.db'
 
     def __init__(self, window):
         self.wind =  window
@@ -28,18 +29,145 @@ class Product:
         self.price.grid(row = 2, column = 1)
 
         #Button add product
-        ttk.Button(frame, text = 'Save Product').grid(row = 3, columnspan = 2, sticky = W + E)
+        ttk.Button(frame, text = 'Save Product', command = self.add_product).grid(row = 3, columnspan = 2, sticky = W + E)
         #sticky = W + E --> asi ocupa todo el ancho, 'de este a oeste' 
+
+        #Output Messages notifica si agregamos o eliminamos productos
+        self.message = Label(text = '', fg = 'red')
+        self.message.grid(row = 3, column = 0, columnspan = 2, sticky = W + E)
 
         #Table
         self.tree = ttk.Treeview(height = 10, columns = 2)
         self.tree.grid(row = 4, column = 0, columnspan = 2)
         self.tree.heading('#0', text = 'Name', anchor = CENTER)
         #encabezado de la primer columna
+        self.tree.heading('#1', text = 'Price', anchor = CENTER)
+        #encabezado de productos
         
+        #Buttons
+        ttk.Button(text = 'DELETE', command = self.delete_product).grid(row = 5, column = 0, sticky = W + E)
+        ttk.Button(text = 'EDIT', command = self.edit_product).grid(row = 5, column = 1, sticky = W + E)
+
+        #Filling the rows     
+
+        self.get_products()
 
 
-        
+
+
+    def run_query(self, query, parameters = ()):
+            #funcion para ejecutar la consulta en la db
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+                #me dice en q posicion de la db se encuentra
+            result = cursor.execute(query, parameters)
+                #me permite ejecutar una consulta sql, busca query, si no existen parametros toma una tupla vacia
+                #result me almacenara los datos obtenidos de la consulta si los encuentra
+            conn.commit()
+                #ejecuta la sintaxis
+        return result
+
+    def get_products(self):
+        #----------si la tabla no esta vacia la limpiamos para ingresar los nuevos datos
+        records = self.tree.get_children()
+        for element in records:
+            self.tree.delete(element)
+        #--------------------------
+        # consultamos los datos de la tabla
+        query = 'SELECT * FROM product ORDER BY name DESC'
+        db_rows = self.run_query(query)
+        #rellenando los datos
+        for row in db_rows:
+            print(row)
+            self.tree.insert('', 0, text = row[1], values = row[2])
+
+
+    #----------------------------------------------
+    def validation(self):
+        return len(self.name.get()) != 0 and len(self.price.get()) != 0
+
+    def add_product(self):
+        if self.validation():
+            query = 'INSERT INTO product VALUES(NULL, ?, ?)'
+            parameters = (self.name.get(), self.price.get())
+            self.run_query(query, parameters)
+            #datos insertados
+            self.message['text'] = 'Product {} added Succesfully'.format(self.name.get())
+            #------------------------
+            self.name.delete(0, END)
+            self.price.delete(0, END)
+            #------seteamos name y price-----
+        else:
+            self.message['text'] = 'Name and Price is required'
+        self.get_products()
+        #vemos los cambios en la tabla 
+
+#--------------------------------------------------
+    def delete_product(self):
+        self.message['text'] = ''
+        try:
+            self.tree.item(self.tree.selection())['text'][0]
+            #si el elemento esta seleccionado obtengo el texto del elemento
+        except IndexError as e:
+            self.message['text'] = 'Please select a Record'
+            return
+        self.message['text'] = ''
+        name = self.tree.item(self.tree.selection())['text']
+        #obtengo lo que selecciono el usuario
+        query = 'DELETE FROM product WHERE name = ?'
+        #paso el dato que quiero eliminar
+        self.run_query(query, (name, ))
+        self.message['text'] = 'Record {) deleted Successfully'.format(name) 
+        self.get_products()
+        #----actualizo la tabla
+
+#----------------------------------------------------------------------------
+    def edit_product(self):
+        self.message['text'] = ''
+        try:
+            self.tree.item(self.tree.selection())['values'][0]
+            #si el elemento esta seleccionado obtengo el texto del elemento
+        except IndexError as e:
+            self.message['text'] = 'Please select a Record'
+            return
+        name = self.tree.item(self.tree.selection())['text']
+        old_price = self.tree.item(self.tree.selection())['values'][0]
+        self.edit_wind = Toplevel()
+        self.edit_wind.title = 'Edit Product' 
+
+#----------------------------------------------------------------------------
+
+        #Old Name
+        Label(self.edit_wind, text = 'Old Name: ').grid(row = 0, column = 1)
+        Entry(self.edit_wind, textvariable = StringVar(self.edit_wind, value = name), state = 'readonly').grid(row = 0, column = 2)
+
+        #New Name
+        Label(self.edit_wind, text = 'New Name').grid(row = 1, column = 1)
+        new_name = Entry(self.edit_wind)
+        new_name.grid(row = 1, column = 2)
+
+        #Old price
+        Label(self.edit_wind, text = 'Old Price').grid(row = 2, column = 1)
+        Entry(self.edit_wind, textvariable = StringVar(self.edit_wind, value = old_price), state= 'readonly').grid(row = 2, column = 2)
+
+        #New Price
+        Label(self.edit_wind, text = 'New Price:').grid(row = 3, column = 1)
+        new_price = Entry(self.edit_wind)
+        new_price.grid(row = 3, column = 2) 
+
+        Button(self.edit_wind, text = 'Update', command = lambda: self.edit_records(new_name.get(), name, new_price.get(), old_price)).grid(row = 4, column = 2, sticky=W)    
+
+#-----------------------------------------------------------------------------------------
+    def edit_records(self, new_name, name, new_price, old_price):
+        query = 'UPDATE product SET name = ?, price = ? WHERE name = ?  AND price = ?'
+        parameters = (new_name, new_price, name, old_price)
+        self.run_query(query, parameters)
+        self.edit_wind.destroy()
+        self.message['text'] = 'Record {} updated Successfully'.format(name)
+        self.get_products()
+
+
+       
 if __name__== '__main__':
     window = Tk()
     application = Product(window)    
